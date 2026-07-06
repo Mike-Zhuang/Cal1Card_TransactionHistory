@@ -1,0 +1,12 @@
+node_modules/
+.cal1card-profile/
+.cal1card-bind-profile/
+.cal1card-storage-state.json
+data/
+.env
+.env.*
+!.env.example
+*.har
+*.log
+.DS_Store
+npm-debug.log*

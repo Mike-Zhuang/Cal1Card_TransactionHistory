@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cal1Card 控制台</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="loginPanel" class="login-panel">
+        <h1>Cal1Card</h1>
+        <p>登录你的控制台账号后，再用本地绑定工具完成 Berkeley 官方登录。</p>
+        <form id="loginForm" class="login-form">
+          <label for="passwordInput">控制台密码</label>
+          <div class="login-row">
+            <input id="passwordInput" type="password" autocomplete="current-password" />
+            <button id="loginButton" type="submit" class="primary">登录</button>
+          </div>
+        </form>
+        <p id="loginStatusText" class="status-line">等待登录</p>
+      </section>
+
+      <section id="dashboardPanel" class="hidden">
+        <section class="toolbar" aria-label="Cal1Card 操作栏">
+          <div>
+            <h1>Cal1Card</h1>
+            <p id="statusText">等待操作</p>
+          </div>
+          <div class="actions">
+            <button id="createBindTokenButton" type="button">生成绑定码</button>
+            <button id="refreshBalanceButton" type="button" class="primary">刷新余额</button>
+            <button id="unbindButton" type="button" class="quiet">解绑</button>
+            <button id="logoutButton" type="button" class="quiet">退出</button>
+          </div>
+        </section>
+
+        <section class="binding-panel" aria-label="绑定状态">
+          <div>
+            <span>绑定状态</span>
+            <strong id="bindingStatusText">检查中</strong>
+          </div>
+          <div id="bindCommandBox" class="bind-command-box hidden">
+            <span>在你的本机项目目录运行</span>
+            <code id="bindCommandText"></code>
+          </div>
+        </section>
+
+        <section class="summary-grid" aria-label="账户摘要">
+          <article class="summary-panel">
+            <span>更新时间</span>
+            <strong id="asOfText">--</strong>
+          </article>
+          <article class="summary-panel">
+            <span>账户</span>
+            <strong id="accountText">--</strong>
+          </article>
+          <article class="summary-panel">
+            <span>Plan 数量</span>
+            <strong id="planCountText">0</strong>
+          </article>
+        </section>
+
+        <section class="content-grid">
+          <section class="panel" aria-label="余额列表">
+            <div class="panel-head">
+              <h2>余额</h2>
+              <span id="fetchTimeText">--</span>
+            </div>
+            <div id="plansList" class="plans-list">
+              <div class="empty-state">暂无数据</div>
+            </div>
+          </section>
+
+          <section class="panel" aria-label="消费记录">
+            <div class="panel-head">
+              <h2>消费记录</h2>
+              <span id="selectedPlanText">未选择</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Posted</th>
+                    <th>Amount</th>
+                    <th>New Balance</th>
+                    <th>Location</th>
+                  </tr>
+                </thead>
+                <tbody id="transactionsBody">
+                  <tr>
+                    <td colspan="4" class="empty-cell">暂无数据</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "cal1card-local-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bind": "node scripts/bind-cal1card.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "express": "^4.19.2",
+    "playwright": "^1.45.3"
+  },
+  "devDependencies": {}
+}

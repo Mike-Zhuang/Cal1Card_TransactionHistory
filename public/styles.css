@@ -1,0 +1,403 @@
+:root {
+  color-scheme: light;
+  --bg: #f4f1ec;
+  --surface: #ffffff;
+  --surface-muted: #f8f7f4;
+  --text: #151515;
+  --muted: #6a6f77;
+  --line: #d8d3ca;
+  --blue: #1d4f91;
+  --blue-dark: #12396c;
+  --gold: #c78d1e;
+  --green: #1e7a55;
+  --red: #a83a3a;
+  --shadow: 0 16px 40px rgba(36, 32, 26, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.hidden {
+  display: none !important;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.login-panel,
+.binding-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.login-panel {
+  width: min(520px, 100%);
+  margin: 12vh auto 0;
+  padding: 26px;
+}
+
+.login-panel h1 {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.1;
+}
+
+.login-panel p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.login-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.login-form label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.login-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.login-row input {
+  min-height: 42px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 12px;
+  font: inherit;
+}
+
+.primary {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: white;
+}
+
+.status-line,
+.toolbar p {
+  color: var(--muted);
+}
+
+.status-line[data-type="success"],
+.toolbar p[data-type="success"],
+.binding-panel strong[data-type="success"] {
+  color: var(--green);
+}
+
+.status-line[data-type="warning"],
+.toolbar p[data-type="warning"],
+.binding-panel strong[data-type="warning"] {
+  color: var(--gold);
+}
+
+.status-line[data-type="error"],
+.toolbar p[data-type="error"],
+.binding-panel strong[data-type="error"] {
+  color: var(--red);
+}
+
+.app-shell {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 0 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.toolbar h1 {
+  margin: 0;
+  font-size: 32px;
+  line-height: 1.1;
+  font-weight: 760;
+}
+
+.toolbar p {
+  margin: 8px 0 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.actions button {
+  min-height: 40px;
+  padding: 0 14px;
+  font-weight: 680;
+}
+
+.actions .primary {
+  color: white;
+}
+
+.actions .primary:hover {
+  background: var(--blue-dark);
+}
+
+.actions .quiet {
+  color: var(--muted);
+}
+
+.binding-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  margin: 18px 0 0;
+  padding: 16px 18px;
+}
+
+.binding-panel span,
+.bind-command-box span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.binding-panel strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 17px;
+}
+
+.bind-command-box code {
+  display: block;
+  margin-top: 8px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #1f252b;
+  color: #f1f5f8;
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.summary-panel,
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.summary-panel {
+  min-height: 96px;
+  padding: 18px;
+}
+
+.summary-panel span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.summary-panel strong {
+  display: block;
+  margin-top: 10px;
+  overflow-wrap: anywhere;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.panel {
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.panel-head span {
+  color: var(--muted);
+  font-size: 13px;
+  text-align: right;
+}
+
+.plans-list {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.plan-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  align-items: center;
+  padding: 12px;
+  text-align: left;
+}
+
+.plan-row:hover,
+.plan-row.selected {
+  border-color: var(--blue);
+}
+
+.plan-row.selected {
+  background: #eef4fb;
+}
+
+.plan-text {
+  min-width: 0;
+}
+
+.plan-name,
+.plan-meta {
+  display: block;
+}
+
+.plan-name {
+  overflow-wrap: anywhere;
+  font-weight: 720;
+}
+
+.plan-meta {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plan-balance {
+  color: var(--blue-dark);
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+td {
+  font-size: 14px;
+}
+
+.empty-state,
+.empty-cell {
+  color: var(--muted);
+  text-align: center;
+}
+
+.empty-state {
+  padding: 28px 12px;
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    width: min(100% - 20px, 1180px);
+    padding-top: 16px;
+  }
+
+  .toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .actions button {
+    flex: 1 1 150px;
+  }
+
+  .summary-grid,
+  .content-grid,
+  .binding-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .login-row {
+    grid-template-columns: 1fr;
+  }
+}
