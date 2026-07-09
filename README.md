@@ -82,6 +82,8 @@ npm run test:e2e
 5. 验证 VNC 只监听本机后再打开网页登录。
 6. 在宝塔创建 `17 */4 * * *` 的同步任务，执行 `deploy/cal1card-sync.sh`。
 
+服务器的 gh-proxy 自动部署入口为 `deploy/cal1card-sync-deploy.sh`，默认先尝试 gh-proxy，再尝试备用代理与 GitHub 直连。
+
 计划任务日志只输出时间、成功/失败状态和新增/总交易数，不输出姓名、余额、地点或 Cookie。
 
 ## 高级本地绑定
