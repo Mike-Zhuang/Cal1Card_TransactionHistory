@@ -7,4 +7,4 @@ ENV_FILE=/etc/cal1card/cal1card.env
 
 exec /usr/bin/flock -n "$LOCK_FILE" \
   /usr/sbin/runuser -u www -- /bin/bash -lc \
-  "set -a; source '$ENV_FILE'; set +a; cd '$APP_ROOT'; exec /usr/bin/node scripts/sync-cal1card.js"
+  "set -a; source '$ENV_FILE'; set +a; cd '$APP_ROOT'; exec /usr/local/bin/node scripts/sync-cal1card.js"

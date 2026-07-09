@@ -11,7 +11,7 @@ WorkingDirectory=/opt/cal1card
 Environment=NODE_ENV=production
 Environment=PLAYWRIGHT_BROWSERS_PATH=/var/lib/cal1card/ms-playwright
 EnvironmentFile=/etc/cal1card/cal1card.env
-ExecStart=/usr/bin/node src/server.js
+ExecStart=/usr/local/bin/node src/server.js
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=15
