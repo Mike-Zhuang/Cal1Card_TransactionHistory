@@ -1,0 +1,24 @@
+[Unit]
+Description=Cal1Card personal wallet
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www
+Group=www
+WorkingDirectory=/opt/cal1card
+Environment=NODE_ENV=production
+Environment=PLAYWRIGHT_BROWSERS_PATH=/var/lib/cal1card/ms-playwright
+EnvironmentFile=/etc/cal1card/cal1card.env
+ExecStart=/usr/bin/node src/server.js
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+KillMode=control-group
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

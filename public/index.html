@@ -2,103 +2,487 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Cal1Card 控制台</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4f6f3" />
+    <meta name="description" content="Cal1Card 余额、消费记录与预算管理。" />
+    <meta property="og:title" content="Cal1Card" />
+    <meta property="og:description" content="个人 Berkeley 校园钱包。" />
+    <meta property="og:type" content="website" />
+    <title>Cal1Card</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
+    <script src="/vendor/chart/chart.umd.min.js" defer></script>
+    <script src="/vendor/lucide/lucide.min.js" defer></script>
+    <script src="/app.js" type="module"></script>
   </head>
   <body>
-    <main class="app-shell">
-      <section id="loginPanel" class="login-panel">
-        <h1>Cal1Card</h1>
-        <p>登录你的控制台账号后，再用本地绑定工具完成 Berkeley 官方登录。</p>
-        <form id="loginForm" class="login-form">
+    <a class="skip-link" href="#mainContent">跳到主要内容</a>
+
+    <div id="bootView" class="boot-view" role="status" aria-label="正在启动 Cal1Card">
+      <img src="/brand-mark.svg" alt="" width="44" height="44" />
+      <strong>Cal1Card</strong>
+      <span class="boot-line" aria-hidden="true"></span>
+    </div>
+
+    <main id="loginView" class="auth-view hidden">
+      <section class="auth-main" aria-labelledby="loginTitle">
+        <a class="brand brand-large" href="/" aria-label="Cal1Card 首页">
+          <img src="/brand-mark.svg" alt="" width="42" height="42" />
+          <span>Cal1Card</span>
+        </a>
+        <div class="auth-copy">
+          <p class="eyebrow">Personal campus wallet</p>
+          <h1 id="loginTitle">查看你的校园消费</h1>
+          <p>使用控制台密码继续。</p>
+        </div>
+        <form id="loginForm" class="auth-form" novalidate>
           <label for="passwordInput">控制台密码</label>
-          <div class="login-row">
-            <input id="passwordInput" type="password" autocomplete="current-password" />
-            <button id="loginButton" type="submit" class="primary">登录</button>
+          <div class="password-control">
+            <input
+              id="passwordInput"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+              maxlength="1024"
+            />
+            <button
+              id="togglePasswordButton"
+              class="icon-button input-action"
+              type="button"
+              aria-label="显示密码"
+              title="显示密码"
+            >
+              <i data-lucide="eye" aria-hidden="true"></i>
+            </button>
           </div>
+          <button id="loginButton" class="button button-primary button-wide" type="submit">
+            <span>进入钱包</span>
+            <i data-lucide="arrow-right" aria-hidden="true"></i>
+          </button>
+          <p id="loginStatus" class="form-status" role="status">请输入控制台密码</p>
         </form>
-        <p id="loginStatusText" class="status-line">等待登录</p>
       </section>
 
-      <section id="dashboardPanel" class="hidden">
-        <section class="toolbar" aria-label="Cal1Card 操作栏">
-          <div>
-            <h1>Cal1Card</h1>
-            <p id="statusText">等待操作</p>
-          </div>
-          <div class="actions">
-            <button id="createBindTokenButton" type="button">生成绑定码</button>
-            <button id="refreshBalanceButton" type="button" class="primary">刷新余额</button>
-            <button id="unbindButton" type="button" class="quiet">解绑</button>
-            <button id="logoutButton" type="button" class="quiet">退出</button>
-          </div>
-        </section>
-
-        <section class="binding-panel" aria-label="绑定状态">
-          <div>
-            <span>绑定状态</span>
-            <strong id="bindingStatusText">检查中</strong>
-          </div>
-          <div id="bindCommandBox" class="bind-command-box hidden">
-            <span>在你的本机项目目录运行</span>
-            <code id="bindCommandText"></code>
-          </div>
-        </section>
-
-        <section class="summary-grid" aria-label="账户摘要">
-          <article class="summary-panel">
-            <span>更新时间</span>
-            <strong id="asOfText">--</strong>
-          </article>
-          <article class="summary-panel">
-            <span>账户</span>
-            <strong id="accountText">--</strong>
-          </article>
-          <article class="summary-panel">
-            <span>Plan 数量</span>
-            <strong id="planCountText">0</strong>
-          </article>
-        </section>
-
-        <section class="content-grid">
-          <section class="panel" aria-label="余额列表">
-            <div class="panel-head">
-              <h2>余额</h2>
-              <span id="fetchTimeText">--</span>
-            </div>
-            <div id="plansList" class="plans-list">
-              <div class="empty-state">暂无数据</div>
-            </div>
-          </section>
-
-          <section class="panel" aria-label="消费记录">
-            <div class="panel-head">
-              <h2>消费记录</h2>
-              <span id="selectedPlanText">未选择</span>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Posted</th>
-                    <th>Amount</th>
-                    <th>New Balance</th>
-                    <th>Location</th>
-                  </tr>
-                </thead>
-                <tbody id="transactionsBody">
-                  <tr>
-                    <td colspan="4" class="empty-cell">暂无数据</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </section>
-      </section>
+      <aside class="auth-ledger" aria-hidden="true">
+        <div class="auth-ledger-top">
+          <span>CAL</span>
+          <span>01</span>
+        </div>
+        <div class="auth-ledger-rule"></div>
+        <div class="auth-ledger-lines">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <p>BERKELEY / CALIFORNIA</p>
+      </aside>
     </main>
 
-    <script src="/app.js" type="module"></script>
+    <div id="authenticatedShell" class="app-shell hidden">
+      <header class="app-header">
+        <div class="header-inner">
+          <button id="brandHomeButton" class="brand brand-button" type="button" aria-label="返回钱包">
+            <img src="/brand-mark.svg" alt="" width="34" height="34" />
+            <span>Cal1Card</span>
+          </button>
+          <div class="header-account">
+            <span id="headerAccount">个人钱包</span>
+            <span class="connection-state">
+              <span id="connectionDot" class="status-dot" aria-hidden="true"></span>
+              <span id="connectionStateText">检查连接</span>
+            </span>
+          </div>
+          <div class="header-actions">
+            <button
+              id="syncButton"
+              class="icon-button"
+              type="button"
+              aria-label="同步数据"
+              title="同步数据"
+            >
+              <i data-lucide="refresh-cw" aria-hidden="true"></i>
+            </button>
+            <button
+              id="settingsButton"
+              class="icon-button"
+              type="button"
+              aria-label="打开设置"
+              title="设置"
+            >
+              <i data-lucide="settings-2" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div id="connectionBanner" class="connection-banner hidden" role="status">
+        <div>
+          <i data-lucide="link-2-off" aria-hidden="true"></i>
+          <span id="connectionBannerText">CalNet 登录态已过期</span>
+        </div>
+        <button id="bannerConnectButton" class="button button-compact" type="button">重新连接</button>
+      </div>
+
+      <main id="mainContent">
+        <section id="loadingView" class="state-view hidden" aria-labelledby="loadingTitle">
+          <div class="state-index" aria-hidden="true">CAL / 01</div>
+          <p class="eyebrow">Loading wallet</p>
+          <h1 id="loadingTitle">正在读取钱包</h1>
+          <div class="state-loading-lines" aria-hidden="true"><span></span><span></span><span></span></div>
+        </section>
+
+        <section id="errorView" class="state-view hidden" aria-labelledby="errorTitle">
+          <div class="state-index error-index" aria-hidden="true">ERR / 01</div>
+          <p class="eyebrow">Connection interrupted</p>
+          <h1 id="errorTitle">暂时无法读取钱包</h1>
+          <p id="errorMessage" class="state-message">服务器连接失败，请稍后重试。</p>
+          <button id="retryAppButton" class="button button-primary" type="button">
+            <i data-lucide="rotate-cw" aria-hidden="true"></i>
+            <span>重试</span>
+          </button>
+        </section>
+
+        <section id="connectView" class="connect-view hidden" aria-labelledby="connectTitle">
+          <div class="connect-layout">
+            <div class="connect-copy">
+              <p class="eyebrow">CalNet connection</p>
+              <h1 id="connectTitle">连接你的 Cal1Card</h1>
+              <p>登录环境只在本次连接期间运行，完成后自动关闭。</p>
+              <button id="startRemoteLoginButton" class="button button-primary" type="button">
+                <i data-lucide="log-in" aria-hidden="true"></i>
+                <span>使用 CalNet 连接</span>
+              </button>
+              <div id="webLoginDisabledNotice" class="inline-notice hidden">
+                网页登录尚未在服务器启用。
+              </div>
+            </div>
+            <div class="connect-visual" aria-hidden="true">
+              <div class="connect-number">01</div>
+              <div class="connect-axis"><span></span><span></span><span></span><span></span></div>
+              <div class="connect-label">SECURE SESSION / 15 MIN</div>
+            </div>
+          </div>
+
+          <details class="fallback-details">
+            <summary>高级备用方式</summary>
+            <div class="fallback-content">
+              <p>仅在网页连接不可用时使用本地绑定工具。</p>
+              <button id="generateFallbackButton" class="button button-secondary" type="button">
+                生成一次性绑定命令
+              </button>
+              <div id="fallbackBox" class="fallback-command hidden">
+                <code id="fallbackCommand"></code>
+                <button
+                  id="copyFallbackButton"
+                  class="icon-button inverse"
+                  type="button"
+                  aria-label="复制绑定命令"
+                  title="复制"
+                >
+                  <i data-lucide="copy" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+          </details>
+        </section>
+
+        <section id="remoteLoginView" class="remote-login-view hidden" aria-labelledby="remoteLoginTitle">
+          <div class="remote-toolbar">
+            <div>
+              <p class="eyebrow">Temporary browser</p>
+              <h1 id="remoteLoginTitle">CalNet 登录</h1>
+            </div>
+            <div class="remote-toolbar-actions">
+              <span id="remoteCountdown" class="mono-label">15:00</span>
+              <button
+                id="focusRemoteButton"
+                class="icon-button"
+                type="button"
+                aria-label="聚焦远程键盘"
+                title="聚焦键盘"
+              >
+                <i data-lucide="keyboard" aria-hidden="true"></i>
+              </button>
+              <button id="cancelRemoteButton" class="button button-secondary" type="button">取消</button>
+            </div>
+          </div>
+          <div class="remote-status-row">
+            <span class="status-dot active" aria-hidden="true"></span>
+            <span id="remoteStatusText">正在启动安全登录环境</span>
+          </div>
+          <div id="remoteStage" class="remote-stage">
+            <div id="remoteDesktop" class="remote-desktop" aria-label="远程 CalNet 浏览器"></div>
+            <div id="remoteStageStatus" class="remote-stage-status">
+              <span class="loading-mark" aria-hidden="true"></span>
+              <span>正在准备远程浏览器</span>
+            </div>
+          </div>
+          <button id="retryRemoteButton" class="button button-primary hidden" type="button">重新连接</button>
+        </section>
+
+        <section id="dashboardView" class="dashboard-view hidden" aria-labelledby="dashboardTitle">
+          <div class="dashboard-heading">
+            <div>
+              <p class="eyebrow">Account overview</p>
+              <h1 id="dashboardTitle">你的 Cal1Card</h1>
+            </div>
+            <p id="dataFreshness" class="data-freshness">等待数据</p>
+          </div>
+
+          <nav id="planSwitcher" class="plan-switcher" aria-label="账户余额类型"></nav>
+
+          <section class="balance-band" aria-label="当前账户摘要">
+            <div class="balance-primary">
+              <span id="selectedPlanName">当前余额</span>
+              <strong id="selectedBalance">--</strong>
+              <span id="balanceAsOf">--</span>
+            </div>
+            <div class="balance-metrics">
+              <div class="balance-metric">
+                <span>本月消费</span>
+                <strong id="monthSpend">--</strong>
+              </div>
+              <div class="balance-metric">
+                <span>近 7 天</span>
+                <strong id="sevenDaySpend">--</strong>
+                <small id="sevenDayChange">暂无对比</small>
+              </div>
+              <div class="balance-metric">
+                <span>最常消费</span>
+                <strong id="topLocation">--</strong>
+                <small id="topLocationAmount">暂无记录</small>
+              </div>
+              <div class="balance-metric budget-metric">
+                <span>月度预算</span>
+                <button id="budgetMetricButton" class="metric-button" type="button">设置预算</button>
+                <div class="progress-track" aria-hidden="true">
+                  <span id="budgetProgress"></span>
+                </div>
+                <small id="budgetDetail">未设置</small>
+              </div>
+            </div>
+          </section>
+
+          <section class="analytics-layout" aria-label="消费分析">
+            <article class="analytics-panel trend-panel">
+              <div class="section-heading">
+                <div>
+                  <p class="section-kicker">Spending trend</p>
+                  <h2>消费趋势</h2>
+                </div>
+                <span id="trendTotal" class="section-value">--</span>
+              </div>
+              <div class="chart-frame">
+                <canvas id="trendChart" aria-label="消费趋势图"></canvas>
+                <div id="trendEmpty" class="chart-empty hidden">当前范围内没有消费记录</div>
+              </div>
+            </article>
+
+            <article class="analytics-panel category-panel">
+              <div class="section-heading">
+                <div>
+                  <p class="section-kicker">Categories</p>
+                  <h2>消费分类</h2>
+                </div>
+              </div>
+              <div class="category-chart-frame">
+                <canvas id="categoryChart" aria-label="消费分类图"></canvas>
+                <div id="categoryEmpty" class="chart-empty hidden">分类数据会在同步后显示</div>
+              </div>
+              <div id="categoryLegend" class="category-legend"></div>
+            </article>
+          </section>
+
+          <section class="transactions-section" aria-labelledby="transactionsTitle">
+            <div class="transactions-heading">
+              <div>
+                <p class="section-kicker">Activity</p>
+                <h2 id="transactionsTitle">消费记录</h2>
+              </div>
+              <button
+                id="exportButton"
+                class="button button-secondary"
+                type="button"
+                aria-label="导出 CSV"
+                title="导出 CSV"
+              >
+                <i data-lucide="download" aria-hidden="true"></i>
+                <span>导出 CSV</span>
+              </button>
+            </div>
+
+            <div class="filter-bar">
+              <div id="rangeControl" class="segmented-control" aria-label="时间范围">
+                <button type="button" data-range="7d">7 天</button>
+                <button type="button" data-range="30d" class="selected">30 天</button>
+                <button type="button" data-range="90d">90 天</button>
+                <button type="button" data-range="all">全部</button>
+              </div>
+              <label class="search-control" for="transactionSearch">
+                <i data-lucide="search" aria-hidden="true"></i>
+                <input id="transactionSearch" type="search" placeholder="搜索地点" autocomplete="off" />
+              </label>
+              <label class="select-control" for="categoryFilter">
+                <span class="sr-only">筛选分类</span>
+                <select id="categoryFilter">
+                  <option value="">全部分类</option>
+                </select>
+                <i data-lucide="chevron-down" aria-hidden="true"></i>
+              </label>
+            </div>
+
+            <div id="transactionsSkeleton" class="transactions-skeleton hidden" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <div class="transaction-table-wrap">
+              <table class="transaction-table">
+                <thead>
+                  <tr>
+                    <th>日期</th>
+                    <th>地点</th>
+                    <th>分类</th>
+                    <th>金额</th>
+                    <th>余额</th>
+                  </tr>
+                </thead>
+                <tbody id="transactionsBody"></tbody>
+              </table>
+            </div>
+            <div id="transactionList" class="transaction-list"></div>
+            <div id="transactionsEmpty" class="empty-state hidden">
+              <i data-lucide="receipt-text" aria-hidden="true"></i>
+              <strong>没有匹配的消费记录</strong>
+              <span>调整时间范围或筛选条件。</span>
+            </div>
+
+            <nav class="pagination" aria-label="消费记录分页">
+              <span id="paginationText">0 条记录</span>
+              <div>
+                <button
+                  id="previousPageButton"
+                  class="icon-button"
+                  type="button"
+                  aria-label="上一页"
+                  title="上一页"
+                >
+                  <i data-lucide="chevron-left" aria-hidden="true"></i>
+                </button>
+                <button
+                  id="nextPageButton"
+                  class="icon-button"
+                  type="button"
+                  aria-label="下一页"
+                  title="下一页"
+                >
+                  <i data-lucide="chevron-right" aria-hidden="true"></i>
+                </button>
+              </div>
+            </nav>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="settingsDialog" class="settings-dialog">
+      <div class="dialog-header">
+        <div>
+          <p class="section-kicker">Preferences</p>
+          <h2>钱包设置</h2>
+        </div>
+        <button class="icon-button" type="button" data-dialog-close aria-label="关闭设置" title="关闭">
+          <i data-lucide="x" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="settings-list">
+        <div class="settings-row">
+          <div>
+            <strong>CalNet 连接</strong>
+            <span id="settingsConnection">检查中</span>
+          </div>
+          <button id="settingsConnectButton" class="button button-secondary" type="button">重新连接</button>
+        </div>
+        <div class="settings-row">
+          <div>
+            <strong>最近同步</strong>
+            <span id="settingsLastSync">暂无记录</span>
+          </div>
+          <button id="settingsSyncButton" class="icon-button" type="button" aria-label="立即同步" title="立即同步">
+            <i data-lucide="refresh-cw" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="settings-row">
+          <div>
+            <strong>月度预算</strong>
+            <span>按当前余额类型设置</span>
+          </div>
+          <button id="openBudgetButton" class="button button-secondary" type="button">编辑预算</button>
+        </div>
+      </div>
+      <div class="settings-danger">
+        <button id="unbindButton" class="text-button" type="button">解除 CalNet 连接</button>
+        <button id="clearDataButton" class="text-button danger" type="button">清空历史数据</button>
+        <button id="logoutButton" class="text-button" type="button">退出控制台</button>
+      </div>
+    </dialog>
+
+    <dialog id="budgetDialog" class="compact-dialog">
+      <form id="budgetForm" method="dialog">
+        <div class="dialog-header">
+          <div>
+            <p class="section-kicker">Monthly limit</p>
+            <h2>设置月度预算</h2>
+          </div>
+          <button class="icon-button" type="button" data-dialog-close aria-label="关闭" title="关闭">
+            <i data-lucide="x" aria-hidden="true"></i>
+          </button>
+        </div>
+        <p id="budgetPlanName" class="dialog-context">当前余额类型</p>
+        <label for="budgetInput">预算金额</label>
+        <div class="money-input">
+          <span>$</span>
+          <input id="budgetInput" type="number" min="0.01" max="100000" step="0.01" inputmode="decimal" />
+        </div>
+        <div class="dialog-actions">
+          <button id="removeBudgetButton" class="button button-quiet" type="button">移除预算</button>
+          <button class="button button-primary" type="submit">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="unbindDialog" class="compact-dialog">
+      <form id="unbindForm" method="dialog">
+        <div class="dialog-header">
+          <h2>解除 CalNet 连接？</h2>
+          <button class="icon-button" type="button" data-dialog-close aria-label="关闭" title="关闭">
+            <i data-lucide="x" aria-hidden="true"></i>
+          </button>
+        </div>
+        <p class="dialog-context">已保存的历史记录会保留，下一次同步前需要重新登录。</p>
+        <div class="dialog-actions">
+          <button class="button button-secondary" type="button" data-dialog-close>取消</button>
+          <button class="button button-danger" type="submit">解除连接</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="clearDataDialog" class="compact-dialog">
+      <form id="clearDataForm" method="dialog">
+        <div class="dialog-header">
+          <h2>清空全部历史？</h2>
+          <button class="icon-button" type="button" data-dialog-close aria-label="关闭" title="关闭">
+            <i data-lucide="x" aria-hidden="true"></i>
+          </button>
+        </div>
+        <p class="dialog-context">交易、快照、分类和预算将永久删除，CalNet 连接不受影响。</p>
+        <label for="clearDataPassword">控制台密码</label>
+        <input id="clearDataPassword" type="password" autocomplete="current-password" required />
+        <div class="dialog-actions">
+          <button class="button button-secondary" type="button" data-dialog-close>取消</button>
+          <button class="button button-danger" type="submit">永久清空</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="liveRegion" class="sr-only" aria-live="polite"></div>
   </body>
 </html>

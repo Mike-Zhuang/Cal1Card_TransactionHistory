@@ -1,114 +1,95 @@
-# Cal1Card 控制台
+# Cal1Card V2
 
-这是一个“服务器网站 + 本地绑定工具”的 Cal1Card 查询原型。
+Cal1Card V2 是一个单用户 Berkeley 校园钱包：查看余额、积累交易历史、设置地点分类与月度预算，并在网页内完成 CalNet + Duo 登录。
 
-核心原则：
+它不是 UC Berkeley 官方产品，也不会绕过 CalNet 或 Duo。
 
-- CalNet / Duo 登录只在你的本机浏览器里完成。
-- 服务器不保存 CalNet 密码。
-- 服务器只保存加密后的 Playwright `storageState`。
-- 登录态失效后重新绑定，不自动绕过 CalNet / Duo。
+## 功能
 
-## 1. 服务器启动
+- 移动端优先的钱包仪表盘，桌面端提供高密度交易视图。
+- 多 plan 切换、消费趋势、分类分布、热门地点和预算进度。
+- 7/30/90 天与全部范围、地点搜索、分类筛选、分页和 CSV 导出。
+- 地点级分类规则，可立即应用到同地点历史交易。
+- 网页内 15 分钟临时 Chromium，通过同源 noVNC 完成 CalNet + Duo。
+- 本地绑定命令保留为高级恢复通道。
+- SQLite 长期历史；账户、交易、预算和规则按记录 AES-256-GCM 加密。
 
-先设置你自己网站的控制台密码：
+## 安全模型
+
+- 不保存 CalNet 密码。
+- 登录成功后只保留 `c1capps.sait-west.berkeley.edu` 的必要 Cookie；CalNet TGC、Duo Cookie 和浏览器信任状态会被删除。
+- 远程画面不在 URL 携带 token。临时 Cookie 为 `HttpOnly`、`SameSite=Strict`、路径受限，生产环境带 `Secure`。
+- VNC 只监听 `127.0.0.1`；成功、取消、超时或服务停止时回收 Chromium、x11vnc 和 Xvfb。
+- 控制台使用 7 天签名会话、CSRF、同源 Origin 校验、恒定时间密码比较和登录限流。
+- API 禁止缓存，并启用 CSP、HSTS 等安全响应头。
+
+临时远程浏览器的代价是登录期间服务器会处理画面与键盘输入，且 Chromium 会短时占用较多内存。若服务器本身被入侵，攻击者可能观察正在进行的会话。因此本项目限制为单用户、单会话、15 分钟，不开放 VNC 公网端口；异常时可关闭 `CAL1CARD_WEB_LOGIN_ENABLED` 回到本地绑定。
+
+## 本地开发
+
+要求 Node.js 22.17 或更高版本。
 
 ```bash
-export CAL1CARD_APP_PASSWORD='换成一个强密码'
+npm ci
+cp .env.example .env
+CAL1CARD_APP_PASSWORD='local-password' npm start
 ```
 
-建议服务器上也固定一个加密密钥，避免换机器或清空 `data/server-secret.key` 后无法解密旧登录态：
+默认监听 `http://127.0.0.1:3000`。网页远程登录依赖 Linux 上的 Xvfb 与 x11vnc；macOS 开发时可保持功能关闭。
 
-```bash
-export CAL1CARD_ENCRYPTION_KEY='换成一个足够长的随机字符串'
-```
+## 环境变量
 
-启动：
-
-```bash
-cd /Users/mike/Documents/Website/Cal1Card
-npm install
-npm start
-```
-
-默认监听：
+生产环境至少设置：
 
 ```text
-http://127.0.0.1:3000
+CAL1CARD_APP_PASSWORD
+CAL1CARD_ENCRYPTION_KEY
+CAL1CARD_PUBLIC_ORIGIN
+CAL1CARD_DATA_DIR
+CAL1CARD_WEB_LOGIN_ENABLED
+PLAYWRIGHT_BROWSERS_PATH
 ```
 
-部署到服务器时可以改：
+完整示例见 `.env.example`。密码和加密密钥必须相互独立，不要提交到 Git。
+
+## 测试
 
 ```bash
-HOST=0.0.0.0 PORT=3000 npm start
+npm run check:syntax
+npm test
+npx playwright install chromium webkit
+npm run test:e2e
 ```
 
-公网部署必须放在 HTTPS 后面，例如 Nginx / Caddy / Cloudflare Tunnel。
+测试覆盖解析、金额日期标准化、加密防篡改、V1 密钥迁移、HMAC 去重、SQLite 迁移、分类、预算、会话、CSRF、限流、WebSocket 拒绝和远程进程回收。浏览器测试覆盖 Chromium/WebKit 与 390/768/1440 三档视口，并执行 Axe 检查。
 
-## 2. 网页使用流程
+## 服务器部署
 
-1. 打开服务器网站。
-2. 输入 `CAL1CARD_APP_PASSWORD` 登录你的控制台。
-3. 点击“生成绑定码”。
-4. 复制网页里显示的 `npm run bind -- ...` 命令。
-5. 在你的本机项目目录运行这个命令。
-6. 本机会弹出 Playwright 浏览器，你在官方 Berkeley 页面完成 CalNet + Duo。
-7. 绑定脚本自动上传 storageState。
-8. 回到网页点击“刷新余额”。
+建议目录：
 
-## 3. 本地绑定工具
+```text
+/opt/cal1card                 应用代码
+/var/lib/cal1card             加密状态、SQLite 和 Playwright 浏览器
+/etc/cal1card/cal1card.env    仅 root/www 可读的环境变量
+```
 
-示例命令格式：
+部署顺序：
+
+1. 备份旧 `data/` 和环境变量。
+2. 先以 `CAL1CARD_WEB_LOGIN_ENABLED=false` 发布并验证旧登录态迁移。
+3. 安装 Chromium、Xvfb、x11vnc 与 Playwright 系统依赖。
+4. 配置 `deploy/cal1card.service` 和 Nginx WebSocket location。
+5. 验证 VNC 只监听本机后再打开网页登录。
+6. 在宝塔创建 `17 */4 * * *` 的同步任务，执行 `deploy/cal1card-sync.sh`。
+
+计划任务日志只输出时间、成功/失败状态和新增/总交易数，不输出姓名、余额、地点或 Cookie。
+
+## 高级本地绑定
+
+网页登录异常时，在设置页生成一次性命令：
 
 ```bash
-npm run bind -- --server https://your-domain.example --token <绑定码>
+npm run bind -- --server https://cal1card.example.com --token <一次性绑定码>
 ```
 
-本地绑定工具会：
-
-1. 打开官方 Cal1Card 页面。
-2. 等你手动完成 CalNet / Duo。
-3. 确认页面出现 Cal1Card 账户信息。
-4. 导出 Playwright storageState。
-5. 用一次性绑定码上传到你的服务器。
-
-绑定码有效期 10 分钟，且只能使用一次。
-
-## 4. 文件与安全
-
-运行时敏感文件：
-
-```text
-data/
-.cal1card-bind-profile/
-```
-
-这些已经被 `.gitignore` 忽略。
-
-不要上传：
-
-- `data/`
-- `.cal1card-bind-profile/`
-- HAR
-- 完整 cURL
-- Cookie
-- Cal1Card 页面截图
-
-## 5. 登录态失效
-
-如果网页提示需要重新绑定：
-
-1. 登录控制台。
-2. 点击“生成绑定码”。
-3. 在本机重新运行绑定命令。
-4. 完成 CalNet / Duo 后再刷新余额。
-
-## 6. 开发默认密码
-
-如果没有设置 `CAL1CARD_APP_PASSWORD`，程序会临时使用：
-
-```text
-cal1card-dev
-```
-
-这个只适合本地开发。部署服务器前必须设置环境变量。
+绑定码默认 10 分钟失效。此通道同样会过滤并加密登录态。
