@@ -160,6 +160,9 @@ export class RemoteLoginManager {
     if (error?.code === "ENOENT") {
       return "服务器缺少远程浏览器运行组件";
     }
+    if (error?.name === "TimeoutError" || /Timeout \d+ms exceeded/i.test(error?.message ?? "")) {
+      return "CalNet 页面加载超时，请重试";
+    }
     const message = error instanceof Error ? error.message : String(error);
     return message.replace(/https?:\/\/\S+/g, "远程页面").slice(0, 240);
   }
@@ -260,7 +263,9 @@ export class RemoteLoginManager {
     session.resources.context = context;
     session.resources.page = await context.newPage();
     await session.resources.page.goto(this.config.calnetLoginUrl, {
-      waitUntil: "domcontentloaded",
+      // CalNet 的同步第三方资源在中国网络下可能长期阻塞 DOMContentLoaded。
+      // 主文档提交后即可通过远程桌面观察并操作后续加载过程。
+      waitUntil: "commit",
       timeout: 45_000,
     });
     this.assertActive(session);
