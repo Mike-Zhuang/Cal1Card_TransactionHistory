@@ -184,7 +184,7 @@ restart_and_verify() {
   fi
 
   for attempt in {1..20}; do
-    if curl --silent --show-error --fail "http://127.0.0.1:${PORT}/api/auth/me" >/dev/null; then
+    if curl --silent --fail "http://127.0.0.1:${PORT}/api/auth/me" >/dev/null; then
       log "本机健康检查通过。"
       return
     fi
