@@ -14,6 +14,8 @@ LOCK_FILE="${LOCK_FILE:-/run/lock/cal1card-sync-deploy.lock}"
 GIT_TIMEOUT_SECONDS="${GIT_TIMEOUT_SECONDS:-60}"
 PORT="${PORT:-3101}"
 PUBLIC_ORIGIN="${PUBLIC_ORIGIN:-https://cal1card.mikezhuang.cn}"
+DEPLOY_SCRIPT_TARGET="${DEPLOY_SCRIPT_TARGET:-/usr/local/bin/cal1card-sync-deploy.sh}"
+SYNC_SCRIPT_TARGET="${SYNC_SCRIPT_TARGET:-/usr/local/bin/cal1card-sync.sh}"
 NEEDS_RESTART=0
 CANDIDATES=(
   "https://gh-proxy.com/https://github.com/Mike-Zhuang/Cal1Card_TransactionHistory.git"
@@ -134,6 +136,23 @@ prepare_repo() {
   chown -h www:www "${APP_DIR}/data"
 }
 
+install_operational_scripts() {
+  local deploySource syncSource
+  deploySource="${APP_DIR}/deploy/cal1card-sync-deploy.sh"
+  syncSource="${APP_DIR}/deploy/cal1card-sync.sh"
+  [[ -f "$deploySource" ]] || fail "缺少自动部署脚本。"
+  [[ -f "$syncSource" ]] || fail "缺少账户同步脚本。"
+
+  if ! cmp -s "$deploySource" "$DEPLOY_SCRIPT_TARGET"; then
+    install -m 755 "$deploySource" "$DEPLOY_SCRIPT_TARGET"
+    log "已更新自动部署脚本。"
+  fi
+  if ! cmp -s "$syncSource" "$SYNC_SCRIPT_TARGET"; then
+    install -m 755 "$syncSource" "$SYNC_SCRIPT_TARGET"
+    log "已更新账户同步脚本。"
+  fi
+}
+
 install_dependencies() {
   local stateFile currentHash previousHash
   [[ -f "${APP_DIR}/package-lock.json" ]] || fail "缺少 package-lock.json，拒绝部署。"
@@ -203,6 +222,7 @@ main() {
   acquire_lock
   ensure_runtime
   prepare_repo
+  install_operational_scripts
   install_dependencies
   ensure_service
   restart_and_verify
