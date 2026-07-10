@@ -3,8 +3,6 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import net from "node:net";
 
-import { load } from "cheerio";
-import { chromium, request as playwrightRequest } from "playwright";
 import { WebSocket, WebSocketServer } from "ws";
 
 import { safeEqualText } from "./crypto-store.js";
@@ -24,6 +22,13 @@ const FORWARDED_RESPONSE_HEADERS = new Set([
   "referrer-policy",
   "x-content-type-options",
 ]);
+
+const lazyChromiumLauncher = {
+  async launch(options) {
+    const { chromium } = await import("playwright");
+    return chromium.launch(options);
+  },
+};
 
 function sleep(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -143,12 +148,17 @@ async function fetchLoginResourceInFreshContext(apiRequestFactory, url, expected
 
 export async function loadOfficialLoginPage({
   loginUrl,
-  apiRequestFactory = playwrightRequest,
+  apiRequestFactory,
 }) {
+  const [{ load }, playwrightModule] = await Promise.all([
+    import("cheerio"),
+    apiRequestFactory ? Promise.resolve(null) : import("playwright"),
+  ]);
+  const requestFactory = apiRequestFactory ?? playwrightModule.request;
   const parsedLoginUrl = new URL(loginUrl);
   assertOfficialCalNetUrl(parsedLoginUrl, parsedLoginUrl.origin);
   const documentLoad = await fetchLoginResourceInFreshContext(
-    apiRequestFactory,
+    requestFactory,
     parsedLoginUrl.toString(),
     parsedLoginUrl.origin,
   );
@@ -183,7 +193,7 @@ export async function loadOfficialLoginPage({
     const assetResources = await Promise.all(
       [...assetUrls].map(async (url) => {
         const loaded = await fetchLoginResourceInFreshContext(
-          apiRequestFactory,
+          requestFactory,
           url,
           parsedLoginUrl.origin,
         );
@@ -261,7 +271,7 @@ export class RemoteLoginManager {
     storageStateStore,
     cal1cardClient,
     syncService,
-    chromiumLauncher = chromium,
+    chromiumLauncher = lazyChromiumLauncher,
     processSpawner = spawnManaged,
     fileExists = existsSync,
     portProbe = isPortOpen,
