@@ -81,10 +81,63 @@ test("SQLite 迁移、加密写入和 HMAC 去重保持稳定", () => {
         .prepare("SELECT version FROM schema_migrations")
         .all()
         .map((row) => row.version),
-      [1],
+      [1, 2],
     );
   } finally {
     fixture.repository.close();
+    rmSync(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("迁移会清理无余额 plan 中由回退表产生的跨 plan 重复记录", () => {
+  const fixture = createFixture();
+  const databasePath = path.join(fixture.directory, "cal1card.sqlite");
+  let reopenedRepository;
+  let originalRepositoryClosed = false;
+  try {
+    const inactivePlan = {
+      planCode: "Full90",
+      name: "Full90",
+      balance: "",
+      balanceValue: null,
+      isCurrency: false,
+    };
+    const duplicateSnapshot = {
+      ...snapshot,
+      plans: [snapshot.plans[0], inactivePlan],
+    };
+    const transaction = transactionGroups[0].transactions[0];
+    fixture.repository.recordSync(duplicateSnapshot, [
+      { plan: duplicateSnapshot.plans[0], transactions: [transaction] },
+      { plan: inactivePlan, transactions: [transaction] },
+    ]);
+    assert.equal(fixture.repository.getTransactions().length, 2);
+
+    fixture.repository.database
+      .prepare("DELETE FROM schema_migrations WHERE version = 2")
+      .run();
+    fixture.repository.close();
+    originalRepositoryClosed = true;
+    reopenedRepository = new DataRepository({
+      databasePath,
+      codec: new EncryptedCodec("repository-test-secret"),
+    });
+
+    const repaired = reopenedRepository.getTransactions();
+    assert.equal(repaired.length, 1);
+    assert.equal(repaired[0].planCode, "Debit");
+    assert.deepEqual(
+      reopenedRepository.database
+        .prepare("SELECT version FROM schema_migrations ORDER BY version")
+        .all()
+        .map((row) => row.version),
+      [1, 2],
+    );
+  } finally {
+    if (!originalRepositoryClosed) {
+      fixture.repository.close();
+    }
+    reopenedRepository?.close();
     rmSync(fixture.directory, { recursive: true, force: true });
   }
 });

@@ -34,6 +34,9 @@ test("余额页面解析保留原始文本并提取计划", () => {
         <tr><td>Meal Swipes Balance: 17
           <a href="/App/CalDining/ViewTransactions?pln=MealSwipes">View Transaction Details</a>
         </td></tr>
+        <tr><td>Summer Resident Flex Balance: 639.00
+          <a href="/App/CalDining/ViewTransactions?pln=sumrh">View Transaction Details</a>
+        </td></tr>
       </table>
     </section>`;
 
@@ -53,6 +56,7 @@ test("余额页面解析保留原始文本并提取计划", () => {
     [
       { planCode: "Debit", balance: "$184.62", balanceValue: 184.62, isCurrency: true },
       { planCode: "MealSwipes", balance: "17", balanceValue: 17, isCurrency: false },
+      { planCode: "sumrh", balance: "639.00", balanceValue: 639, isCurrency: true },
     ],
   );
 });
@@ -73,4 +77,30 @@ test("交易页面解析无法确认的数值时返回 null", () => {
   assert.equal(parsed.transactions[1].postedAt, null);
   assert.equal(parsed.transactions[1].amountValue, null);
   assert.equal(parsed.transactions[1].balanceValue, null);
+});
+
+test("Cal1Card New Balance 表将正数借记规范化为负数消费", () => {
+  const html = `
+    <table id="MainContent_gvsumrh">
+      <tr><th>Posted</th><th>Amount</th><th>New Balance</th><th>Location</th></tr>
+      <tr><td>7/7/2026 6:47:59 PM</td><td>13.00</td><td>639.00</td><td>Clark Kerr</td></tr>
+      <tr><td>7/6/2026 11:54:54 AM</td><td>12.00</td><td>652.00</td><td>Foothill</td></tr>
+      <tr><td>7/6/2026 8:11:40 AM</td><td>11.00</td><td>664.00</td><td>Crossroads</td></tr>
+      <tr><td>7/5/2026 6:32:59 PM</td><td>13.00</td><td>675.00</td><td>Crossroads</td></tr>
+    </table>`;
+
+  const parsed = parseTransactionsHtml(html, "sumrh");
+  assert.deepEqual(parsed.transactions.map(({ amountValue }) => amountValue), [-13, -12, -11, -13]);
+});
+
+test("交易页回退到其他 plan 时不复制错误表格", () => {
+  const html = `
+    <table id="MainContent_gvsumrh">
+      <tr><th>Posted</th><th>Amount</th><th>New Balance</th><th>Location</th></tr>
+      <tr><td>7/7/2026 6:47:59 PM</td><td>13.00</td><td>639.00</td><td>Clark Kerr</td></tr>
+    </table>`;
+
+  const parsed = parseTransactionsHtml(html, "Full90");
+  assert.deepEqual(parsed.headers, []);
+  assert.deepEqual(parsed.transactions, []);
 });

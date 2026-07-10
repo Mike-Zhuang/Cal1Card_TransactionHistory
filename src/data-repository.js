@@ -66,6 +66,71 @@ export class DataRepository {
     this.database
       .prepare("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(1, ?)")
       .run(new Date().toISOString());
+    this.migrateCrossPlanDuplicates();
+  }
+
+  migrateCrossPlanDuplicates() {
+    const alreadyApplied = this.database
+      .prepare("SELECT 1 FROM schema_migrations WHERE version = 2")
+      .get();
+    if (alreadyApplied) {
+      return;
+    }
+
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const snapshotRow = this.database
+        .prepare("SELECT payload FROM snapshots ORDER BY captured_at DESC LIMIT 1")
+        .get();
+      if (snapshotRow) {
+        const snapshot = decryptText(this.codec, snapshotRow.payload);
+        const fundedPlanCodes = new Set(
+          (snapshot.plans ?? [])
+            .filter((plan) => Number.isFinite(plan.balanceValue))
+            .map((plan) => plan.planCode),
+        );
+        const duplicateGroups = new Map();
+        for (const row of this.database
+          .prepare("SELECT transaction_id, payload FROM transactions")
+          .all()) {
+          const transaction = decryptText(this.codec, row.payload);
+          const identity = JSON.stringify({
+            posted: normalizeWhitespace(transaction.posted),
+            amount: normalizeWhitespace(transaction.amount),
+            balance: normalizeWhitespace(transaction.balance),
+            location: normalizeLocation(transaction.location),
+          });
+          const group = duplicateGroups.get(identity) ?? [];
+          group.push({ transactionId: row.transaction_id, planCode: transaction.planCode });
+          duplicateGroups.set(identity, group);
+        }
+
+        const deleteTransaction = this.database.prepare(
+          "DELETE FROM transactions WHERE transaction_id = ?",
+        );
+        for (const group of duplicateGroups.values()) {
+          const fundedMatches = group.filter(({ planCode }) => fundedPlanCodes.has(planCode));
+          const fundedMatchesPlanCodes = new Set(fundedMatches.map(({ planCode }) => planCode));
+          if (group.length < 2 || fundedMatchesPlanCodes.size !== 1) {
+            continue;
+          }
+          const [authoritativePlanCode] = fundedMatchesPlanCodes;
+          for (const transaction of group) {
+            if (transaction.planCode !== authoritativePlanCode) {
+              deleteTransaction.run(transaction.transactionId);
+            }
+          }
+        }
+      }
+
+      this.database
+        .prepare("INSERT INTO schema_migrations(version, applied_at) VALUES(2, ?)")
+        .run(new Date().toISOString());
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   createTransactionId(planCode, transaction) {

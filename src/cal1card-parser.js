@@ -137,12 +137,13 @@ export function parseBalanceHtml(html, currentUrl) {
     const cleanedText = normalizeWhitespace(rowText.replace(/View Transaction Details/gi, ""));
     const balanceMatch = cleanedText.match(/^(.*?)\s*Balance:\s*([-$\d,]+(?:\.\d{2})?)/i);
     const balance = normalizeWhitespace(balanceMatch?.[2]);
+    const hasCurrencyPrecision = /^-?[\d,]+\.\d{2}$/.test(balance);
     plans.push({
       planCode,
       name: normalizeWhitespace(balanceMatch?.[1]) || planCode,
       balance,
       balanceValue: parseNumericValue(balance),
-      isCurrency: /[$\u00a3\u20ac]/.test(balance),
+      isCurrency: /[$\u00a3\u20ac]/.test(balance) || hasCurrencyPrecision,
       detailsPath: `${absoluteUrl.pathname}${absoluteUrl.search}`,
     });
   });
@@ -158,12 +159,9 @@ export function parseBalanceHtml(html, currentUrl) {
 export function parseTransactionsHtml(html, planCode) {
   const $ = load(html);
   const asOf = normalizeWhitespace($("#MainContent_lbBalanceAsOf").text());
-  let table = $("table")
+  const table = $("table")
     .filter((index, element) => $(element).attr("id") === `MainContent_gv${planCode}`)
     .first();
-  if (!table.length) {
-    table = $('table[id^="MainContent_gv"]').first();
-  }
 
   if (!table.length) {
     return { asOf, headers: [], transactions: [] };
@@ -174,7 +172,7 @@ export function parseTransactionsHtml(html, planCode) {
     .find("th,td")
     .toArray()
     .map((cell) => normalizeWhitespace($(cell).text()));
-  const transactions = rows
+  let transactions = rows
     .slice(1)
     .map((row) =>
       $(row)
@@ -192,6 +190,38 @@ export function parseTransactionsHtml(html, planCode) {
       balanceValue: parseNumericValue(cells[2] ?? ""),
       location: cells[3] ?? "",
     }));
+
+  const usesDebitPositiveAmounts = headers.some((header) => /^New Balance$/i.test(header));
+  if (usesDebitPositiveAmounts) {
+    const chronological = transactions
+      .filter((transaction) => transaction.postedAt && transaction.balanceValue !== null)
+      .sort((left, right) => Date.parse(right.postedAt) - Date.parse(left.postedAt));
+    let debitVotes = 0;
+    let creditVotes = 0;
+    for (let index = 0; index < chronological.length - 1; index += 1) {
+      const newer = chronological[index];
+      const older = chronological[index + 1];
+      if (newer.amountValue === null) {
+        continue;
+      }
+      const balanceDrop = older.balanceValue - newer.balanceValue;
+      const amount = Math.abs(newer.amountValue);
+      if (Math.abs(balanceDrop - amount) < 0.005) {
+        debitVotes += 1;
+      } else if (Math.abs(balanceDrop + amount) < 0.005) {
+        creditVotes += 1;
+      }
+    }
+
+    // Cal1Card 的 New Balance 表以正数表示扣款；余额变化用于防止页面约定改变时反向计算。
+    if (debitVotes >= creditVotes) {
+      transactions = transactions.map((transaction) => ({
+        ...transaction,
+        amountValue:
+          transaction.amountValue === null ? null : -transaction.amountValue,
+      }));
+    }
+  }
 
   return { asOf, headers, transactions };
 }

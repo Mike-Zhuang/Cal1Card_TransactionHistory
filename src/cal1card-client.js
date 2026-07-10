@@ -126,9 +126,6 @@ export class Cal1CardClient {
       "MainContent_gv",
     );
     const parsed = parseTransactionsHtml(page.html, planCode);
-    if (!parsed.headers.length) {
-      throw new NeedsBindingError("Cal1Card 交易表结构无法识别");
-    }
     return {
       ok: true,
       fetchedAt: new Date().toISOString(),
