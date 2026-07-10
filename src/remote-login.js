@@ -14,6 +14,8 @@ import { filterCal1CardStorageState } from "./storage-state-store.js";
 const TERMINAL_STATUSES = new Set(["bound", "failed", "expired", "cancelled"]);
 const MAX_LOGIN_RESOURCE_BYTES = 5 * 1024 * 1024;
 const MAX_LOGIN_RESOURCES = 32;
+const LOGIN_RESOURCE_TIMEOUT_MS = 45_000;
+const LOGIN_RESOURCE_ATTEMPTS = 2;
 const FORWARDED_RESPONSE_HEADERS = new Set([
   "cache-control",
   "content-language",
@@ -92,7 +94,7 @@ function assertOfficialCalNetUrl(url, expectedOrigin) {
 async function fetchLoginResource(apiContext, url, expectedOrigin) {
   const response = await apiContext.get(url, {
     failOnStatusCode: false,
-    timeout: 30_000,
+    timeout: LOGIN_RESOURCE_TIMEOUT_MS,
   });
   const responseUrl = assertOfficialCalNetUrl(response.url(), expectedOrigin).toString();
   if (!response.ok()) {
@@ -111,19 +113,48 @@ async function fetchLoginResource(apiContext, url, expectedOrigin) {
   };
 }
 
+function isRetryableLoginResourceError(error) {
+  return (
+    error?.name === "TimeoutError" ||
+    /ECONNRESET|ETIMEDOUT|socket hang up|connection reset/i.test(error?.message ?? "")
+  );
+}
+
+async function fetchLoginResourceInFreshContext(apiRequestFactory, url, expectedOrigin) {
+  let lastError;
+  for (let attempt = 1; attempt <= LOGIN_RESOURCE_ATTEMPTS; attempt += 1) {
+    const apiContext = await apiRequestFactory.newContext({ locale: "en-US" });
+    try {
+      return {
+        apiContext,
+        resource: await fetchLoginResource(apiContext, url, expectedOrigin),
+      };
+    } catch (error) {
+      lastError = error;
+      await apiContext.dispose();
+      if (attempt === LOGIN_RESOURCE_ATTEMPTS || !isRetryableLoginResourceError(error)) {
+        throw error;
+      }
+      await sleep(250);
+    }
+  }
+  throw lastError;
+}
+
 export async function loadOfficialLoginPage({
   loginUrl,
   apiRequestFactory = playwrightRequest,
 }) {
   const parsedLoginUrl = new URL(loginUrl);
   assertOfficialCalNetUrl(parsedLoginUrl, parsedLoginUrl.origin);
-  const apiContext = await apiRequestFactory.newContext({ locale: "en-US" });
+  const documentLoad = await fetchLoginResourceInFreshContext(
+    apiRequestFactory,
+    parsedLoginUrl.toString(),
+    parsedLoginUrl.origin,
+  );
+  const apiContext = documentLoad.apiContext;
   try {
-    const documentResource = await fetchLoginResource(
-      apiContext,
-      parsedLoginUrl.toString(),
-      parsedLoginUrl.origin,
-    );
+    const documentResource = documentLoad.resource;
     const html = documentResource.body.toString("utf8");
     const document = load(html);
     if (document("#username").length === 0) {
@@ -150,7 +181,18 @@ export async function loadOfficialLoginPage({
     }
 
     const assetResources = await Promise.all(
-      [...assetUrls].map((url) => fetchLoginResource(apiContext, url, parsedLoginUrl.origin)),
+      [...assetUrls].map(async (url) => {
+        const loaded = await fetchLoginResourceInFreshContext(
+          apiRequestFactory,
+          url,
+          parsedLoginUrl.origin,
+        );
+        try {
+          return loaded.resource;
+        } finally {
+          await loaded.apiContext.dispose();
+        }
+      }),
     );
     const resources = new Map();
     for (const resource of [documentResource, ...assetResources]) {

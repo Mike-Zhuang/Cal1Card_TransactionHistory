@@ -54,7 +54,7 @@ test("网页登录关闭时拒绝创建远程会话", async () => {
 test("登录页预取只缓存 CalNet 同源资源并过滤响应头", async () => {
   const loginUrl = `${baseConfig.calnetLoginUrl}?service=https%3A%2F%2Fexample.test%2Fcallback`;
   const calls = [];
-  let disposed = false;
+  let disposedCount = 0;
   const bodies = new Map([
     [
       loginUrl,
@@ -67,7 +67,7 @@ test("登录页预取只缓存 CalNet 同源资源并过滤响应头", async () 
     ["https://auth.berkeley.edu/cas/app.css", "body { color: black; }"],
     ["https://auth.berkeley.edu/cas/app.js", "window.ready = true;"],
   ]);
-  const apiContext = {
+  const createApiContext = () => ({
     async get(url) {
       calls.push(url);
       const body = bodies.get(url);
@@ -86,21 +86,67 @@ test("登录页预取只缓存 CalNet 同源资源并过滤响应头", async () 
     },
     storageState: async () => ({ cookies: [{ name: "XSRF-TOKEN" }], origins: [] }),
     async dispose() {
-      disposed = true;
+      disposedCount += 1;
     },
-  };
+  });
 
   const loaded = await loadOfficialLoginPage({
     loginUrl,
-    apiRequestFactory: { newContext: async () => apiContext },
+    apiRequestFactory: { newContext: async () => createApiContext() },
   });
 
   assert.deepEqual(calls.sort(), [...bodies.keys()].sort());
-  assert.equal(disposed, true);
+  assert.equal(disposedCount, 3);
   assert.equal(loaded.resources.size, 3);
   assert.equal(loaded.resources.get(loginUrl).headers["set-cookie"], undefined);
   assert.equal(loaded.resources.get(loginUrl).headers["x-content-type-options"], "nosniff");
   assert.equal(loaded.storageState.cookies[0].name, "XSRF-TOKEN");
+});
+
+test("登录页公开 GET 超时后更换连接重试", async () => {
+  const loginUrl = `${baseConfig.calnetLoginUrl}?service=https%3A%2F%2Fexample.test%2Fcallback`;
+  const assetUrl = "https://auth.berkeley.edu/cas/large.js";
+  const attempts = new Map();
+  let contextCount = 0;
+  let disposedCount = 0;
+  const responseFor = (url, body) => ({
+    url: () => url,
+    ok: () => true,
+    status: () => 200,
+    body: async () => Buffer.from(body),
+    headers: () => ({ "content-type": "text/html" }),
+  });
+  const apiRequestFactory = {
+    async newContext() {
+      contextCount += 1;
+      return {
+        async get(url) {
+          const count = (attempts.get(url) ?? 0) + 1;
+          attempts.set(url, count);
+          if (url === assetUrl && count === 1) {
+            const error = new Error("socket timed out");
+            error.name = "TimeoutError";
+            throw error;
+          }
+          if (url === loginUrl) {
+            return responseFor(url, `<input id="username"><script src="${assetUrl}"></script>`);
+          }
+          return responseFor(url, "window.ready = true;");
+        },
+        storageState: async () => ({ cookies: [], origins: [] }),
+        async dispose() {
+          disposedCount += 1;
+        },
+      };
+    },
+  };
+
+  const loaded = await loadOfficialLoginPage({ loginUrl, apiRequestFactory });
+
+  assert.equal(attempts.get(assetUrl), 2);
+  assert.equal(contextCount, 3);
+  assert.equal(disposedCount, 3);
+  assert.equal(loaded.resources.get(assetUrl).body.toString(), "window.ready = true;");
 });
 
 test("登录页缓存绝不拦截 POST 或未知 GET", async () => {
