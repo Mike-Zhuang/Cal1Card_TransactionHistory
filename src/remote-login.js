@@ -3,7 +3,8 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import net from "node:net";
 
-import { chromium } from "playwright";
+import { load } from "cheerio";
+import { chromium, request as playwrightRequest } from "playwright";
 import { WebSocket, WebSocketServer } from "ws";
 
 import { safeEqualText } from "./crypto-store.js";
@@ -11,6 +12,16 @@ import { parseCookies } from "./auth.js";
 import { filterCal1CardStorageState } from "./storage-state-store.js";
 
 const TERMINAL_STATUSES = new Set(["bound", "failed", "expired", "cancelled"]);
+const MAX_LOGIN_RESOURCE_BYTES = 5 * 1024 * 1024;
+const MAX_LOGIN_RESOURCES = 32;
+const FORWARDED_RESPONSE_HEADERS = new Set([
+  "cache-control",
+  "content-language",
+  "content-security-policy",
+  "content-type",
+  "referrer-policy",
+  "x-content-type-options",
+]);
 
 function sleep(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -60,6 +71,119 @@ function spawnManaged(binary, args) {
   return child;
 }
 
+function filteredResponseHeaders(headers) {
+  return Object.fromEntries(
+    Object.entries(headers).filter(([name]) => FORWARDED_RESPONSE_HEADERS.has(name.toLowerCase())),
+  );
+}
+
+function assertOfficialCalNetUrl(url, expectedOrigin) {
+  const parsedUrl = new URL(url);
+  if (
+    parsedUrl.protocol !== "https:" ||
+    parsedUrl.origin !== expectedOrigin ||
+    !parsedUrl.pathname.startsWith("/cas/")
+  ) {
+    throw new Error("CalNet 登录页跳转到了非预期地址");
+  }
+  return parsedUrl;
+}
+
+async function fetchLoginResource(apiContext, url, expectedOrigin) {
+  const response = await apiContext.get(url, {
+    failOnStatusCode: false,
+    timeout: 30_000,
+  });
+  const responseUrl = assertOfficialCalNetUrl(response.url(), expectedOrigin).toString();
+  if (!response.ok()) {
+    throw new Error(`CalNet 登录资源返回异常状态 ${response.status()}`);
+  }
+  const body = await response.body();
+  if (body.length > MAX_LOGIN_RESOURCE_BYTES) {
+    throw new Error("CalNet 登录资源超过安全大小限制");
+  }
+  return {
+    requestUrl: url,
+    responseUrl,
+    status: response.status(),
+    headers: filteredResponseHeaders(response.headers()),
+    body,
+  };
+}
+
+export async function loadOfficialLoginPage({
+  loginUrl,
+  apiRequestFactory = playwrightRequest,
+}) {
+  const parsedLoginUrl = new URL(loginUrl);
+  assertOfficialCalNetUrl(parsedLoginUrl, parsedLoginUrl.origin);
+  const apiContext = await apiRequestFactory.newContext({ locale: "en-US" });
+  try {
+    const documentResource = await fetchLoginResource(
+      apiContext,
+      parsedLoginUrl.toString(),
+      parsedLoginUrl.origin,
+    );
+    const html = documentResource.body.toString("utf8");
+    const document = load(html);
+    if (document("#username").length === 0) {
+      throw new Error("CalNet 登录页缺少账户输入框");
+    }
+
+    const assetUrls = new Set();
+    document("link[href], script[src], img[src]").each((_, element) => {
+      const rawUrl = document(element).attr("href") ?? document(element).attr("src");
+      if (!rawUrl) {
+        return;
+      }
+      const assetUrl = new URL(rawUrl, documentResource.responseUrl);
+      if (
+        assetUrl.protocol === "https:" &&
+        assetUrl.origin === parsedLoginUrl.origin &&
+        assetUrl.pathname.startsWith("/cas/")
+      ) {
+        assetUrls.add(assetUrl.toString());
+      }
+    });
+    if (assetUrls.size > MAX_LOGIN_RESOURCES) {
+      throw new Error("CalNet 登录页资源数量超过安全限制");
+    }
+
+    const assetResources = await Promise.all(
+      [...assetUrls].map((url) => fetchLoginResource(apiContext, url, parsedLoginUrl.origin)),
+    );
+    const resources = new Map();
+    for (const resource of [documentResource, ...assetResources]) {
+      resources.set(resource.requestUrl, resource);
+      resources.set(resource.responseUrl, resource);
+    }
+
+    return {
+      resources,
+      routePattern: `${parsedLoginUrl.origin}/cas/**`,
+      storageState: await apiContext.storageState(),
+    };
+  } finally {
+    await apiContext.dispose();
+  }
+}
+
+export function createOfficialGetCacheHandler(resources) {
+  return async (route) => {
+    const request = route.request();
+    const resource = request.method() === "GET" ? resources.get(request.url()) : null;
+    if (!resource) {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: resource.status,
+      headers: resource.headers,
+      body: resource.body,
+    });
+  };
+}
+
 async function terminateChild(child) {
   if (!child || child.exitCode !== null || child.signalCode) {
     return;
@@ -100,6 +224,7 @@ export class RemoteLoginManager {
     fileExists = existsSync,
     portProbe = isPortOpen,
     childTerminator = terminateChild,
+    loginPageLoader = loadOfficialLoginPage,
     monitorIntervalMs = 1_000,
     now = () => Date.now(),
   }) {
@@ -112,6 +237,7 @@ export class RemoteLoginManager {
     this.fileExists = fileExists;
     this.portProbe = portProbe;
     this.childTerminator = childTerminator;
+    this.loginPageLoader = loginPageLoader;
     this.monitorIntervalMs = monitorIntervalMs;
     this.now = now;
     this.activeSession = null;
@@ -174,6 +300,10 @@ export class RemoteLoginManager {
   }
 
   async startSession(session) {
+    session.message = "正在安全加载 CalNet 登录页";
+    const loginPage = await this.loginPageLoader({ loginUrl: this.config.calnetLoginUrl });
+    this.assertActive(session);
+
     const displaySocket = `/tmp/.X11-unix/X${this.config.remoteDisplay}`;
     if (this.fileExists(displaySocket)) {
       throw new Error("远程显示编号被占用");
@@ -251,6 +381,7 @@ export class RemoteLoginManager {
     }
     session.resources.browser = browser;
     const context = await browser.newContext({
+      storageState: loginPage.storageState,
       viewport: { width: 1280, height: 760 },
       locale: "en-US",
       timezoneId: "America/Los_Angeles",
@@ -261,13 +392,22 @@ export class RemoteLoginManager {
       throw sessionEndedError();
     }
     session.resources.context = context;
+    const routeHandler = createOfficialGetCacheHandler(loginPage.resources);
+    await context.route(loginPage.routePattern, routeHandler);
     session.resources.page = await context.newPage();
-    await session.resources.page.goto(this.config.calnetLoginUrl, {
-      // CalNet 的同步第三方资源在中国网络下可能长期阻塞 DOMContentLoaded。
-      // 主文档提交后即可通过远程桌面观察并操作后续加载过程。
-      waitUntil: "commit",
-      timeout: 45_000,
-    });
+    try {
+      await session.resources.page.goto(this.config.calnetLoginUrl, {
+        waitUntil: "commit",
+        timeout: 45_000,
+      });
+      await session.resources.page.waitForSelector("#username", {
+        state: "visible",
+        timeout: 20_000,
+      });
+    } finally {
+      await context.unroute(loginPage.routePattern, routeHandler).catch(() => {});
+      loginPage.resources.clear();
+    }
     this.assertActive(session);
     session.status = "awaiting_input";
     session.message = "请完成 CalNet 和 Duo Push";

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { RemoteLoginManager } from "../src/remote-login.js";
+import {
+  RemoteLoginManager,
+  createOfficialGetCacheHandler,
+  loadOfficialLoginPage,
+} from "../src/remote-login.js";
 
 const baseConfig = {
   webLoginEnabled: true,
@@ -15,6 +19,12 @@ const baseConfig = {
   baseUrl: "https://c1capps.sait-west.berkeley.edu",
   balancePath: "/App/CalDining/ViewBalance",
 };
+
+const fakeLoginPageLoader = async () => ({
+  resources: new Map(),
+  routePattern: "https://auth.berkeley.edu/cas/**",
+  storageState: { cookies: [], origins: [] },
+});
 
 function waitFor(check, timeoutMs = 1_000) {
   const startedAt = Date.now();
@@ -39,6 +49,79 @@ test("网页登录关闭时拒绝创建远程会话", async () => {
     syncService: {},
   });
   await assert.rejects(() => manager.createSession(), { code: "WEB_LOGIN_DISABLED" });
+});
+
+test("登录页预取只缓存 CalNet 同源资源并过滤响应头", async () => {
+  const loginUrl = `${baseConfig.calnetLoginUrl}?service=https%3A%2F%2Fexample.test%2Fcallback`;
+  const calls = [];
+  let disposed = false;
+  const bodies = new Map([
+    [
+      loginUrl,
+      `<html><head>
+        <link rel="stylesheet" href="/cas/app.css">
+        <script src="/cas/app.js"></script>
+        <script src="https://tracker.example/ignored.js"></script>
+      </head><body><input id="username"></body></html>`,
+    ],
+    ["https://auth.berkeley.edu/cas/app.css", "body { color: black; }"],
+    ["https://auth.berkeley.edu/cas/app.js", "window.ready = true;"],
+  ]);
+  const apiContext = {
+    async get(url) {
+      calls.push(url);
+      const body = bodies.get(url);
+      assert.notEqual(body, undefined);
+      return {
+        url: () => url,
+        ok: () => true,
+        status: () => 200,
+        body: async () => Buffer.from(body),
+        headers: () => ({
+          "content-type": url.endsWith(".css") ? "text/css" : "text/html",
+          "set-cookie": "must-not-be-forwarded=1",
+          "x-content-type-options": "nosniff",
+        }),
+      };
+    },
+    storageState: async () => ({ cookies: [{ name: "XSRF-TOKEN" }], origins: [] }),
+    async dispose() {
+      disposed = true;
+    },
+  };
+
+  const loaded = await loadOfficialLoginPage({
+    loginUrl,
+    apiRequestFactory: { newContext: async () => apiContext },
+  });
+
+  assert.deepEqual(calls.sort(), [...bodies.keys()].sort());
+  assert.equal(disposed, true);
+  assert.equal(loaded.resources.size, 3);
+  assert.equal(loaded.resources.get(loginUrl).headers["set-cookie"], undefined);
+  assert.equal(loaded.resources.get(loginUrl).headers["x-content-type-options"], "nosniff");
+  assert.equal(loaded.storageState.cookies[0].name, "XSRF-TOKEN");
+});
+
+test("登录页缓存绝不拦截 POST 或未知 GET", async () => {
+  const cachedUrl = "https://auth.berkeley.edu/cas/login";
+  const handler = createOfficialGetCacheHandler(
+    new Map([
+      [cachedUrl, { status: 200, headers: { "content-type": "text/html" }, body: Buffer.from("ok") }],
+    ]),
+  );
+  const actions = [];
+  const makeRoute = (method, url) => ({
+    request: () => ({ method: () => method, url: () => url }),
+    fulfill: async (options) => actions.push({ action: "fulfill", options }),
+    continue: async () => actions.push({ action: "continue", method, url }),
+  });
+
+  await handler(makeRoute("GET", cachedUrl));
+  await handler(makeRoute("POST", cachedUrl));
+  await handler(makeRoute("GET", "https://auth.berkeley.edu/cas/duo"));
+
+  assert.deepEqual(actions.map(({ action }) => action), ["fulfill", "continue", "continue"]);
 });
 
 test("模拟 CalNet/Duo 完成后过滤状态、持久化、同步并回收进程", async () => {
@@ -69,6 +152,8 @@ test("模拟 CalNet/Duo 完成后过滤状态、持久化、同步并回收进�
     waitForSelector: async () => {},
   };
   const context = {
+    route: async () => {},
+    unroute: async () => {},
     newPage: async () => page,
     storageState: async () => rawStorageState,
     close: async () => {
@@ -76,7 +161,10 @@ test("模拟 CalNet/Duo 完成后过滤状态、持久化、同步并回收进�
     },
   };
   const browser = {
-    newContext: async () => context,
+    newContext: async (options) => {
+      assert.deepEqual(options.storageState, { cookies: [], origins: [] });
+      return context;
+    },
     close: async () => {
       browserClosed = true;
     },
@@ -113,6 +201,7 @@ test("模拟 CalNet/Duo 完成后过滤状态、持久化、同步并回收进�
     childTerminator: async (child) => {
       if (child) terminated.push(child.binary);
     },
+    loginPageLoader: fakeLoginPageLoader,
     monitorIntervalMs: 5,
   });
 
@@ -206,6 +295,7 @@ test("浏览器仍在启动时取消，不会在清理后重新挂起 Chromium",
         return launchPromise;
       },
     },
+    loginPageLoader: fakeLoginPageLoader,
   });
 
   const created = await manager.createSession();
